@@ -206,9 +206,10 @@ responseToView hu@(currentRH, user_) ChatConfig {logLevel, showReactions, showRe
   CRSndFileComplete u _ ft -> ttyUser u $ sendingFile_ "completed" ft
   CRSndFileStartXFTP {} -> []
   CRSndFileProgressXFTP {} -> []
-  CRSndFileCompleteXFTP u ci _ -> ttyUser u $ uploadingFile "completed" ci
+  CRSndFileCompleteXFTP u ci _ Nothing -> ttyUser u $ uploadingFile "completed" ci
+  CRSndFileCompleteXFTP u _ _ (Just uris) -> ttyUser u $ directUploadComplete uris
   CRSndFileCancelledXFTP {} -> []
-  CRSndFileError u ci -> ttyUser u $ uploadingFile "error" ci
+  CRSndFileError u ci -> ttyUser u $ uploadingFile "error" (Just ci)
   CRSndFileRcvCancelled u _ ft@SndFileTransfer {recipientDisplayName = c} ->
     ttyUser u [ttyContact c <> " cancelled receiving " <> sndFile ft]
   CRContactConnecting u _ -> ttyUser u []
@@ -1557,12 +1558,16 @@ sendingFile_ :: StyledString -> SndFileTransfer -> [StyledString]
 sendingFile_ status ft@SndFileTransfer {recipientDisplayName = c} =
   [status <> " sending " <> sndFile ft <> " to " <> ttyContact c]
 
-uploadingFile :: StyledString -> AChatItem -> [StyledString]
-uploadingFile status (AChatItem _ _ (DirectChat Contact {localDisplayName = c}) ChatItem {file = Just CIFile {fileId, fileName}, chatDir = CIDirectSnd}) =
-  [status <> " uploading " <> fileTransferStr fileId fileName <> " for " <> ttyContact c]
-uploadingFile status (AChatItem _ _ (GroupChat g) ChatItem {file = Just CIFile {fileId, fileName}, chatDir = CIGroupSnd}) =
-  [status <> " uploading " <> fileTransferStr fileId fileName <> " for " <> ttyGroup' g]
-uploadingFile status _ = [status <> " uploading file"] -- shouldn't happen
+uploadingFile :: StyledString -> Maybe AChatItem -> [StyledString]
+uploadingFile status = \case
+  Just (AChatItem _ _ (DirectChat Contact {localDisplayName = c}) ChatItem {file = Just CIFile {fileId, fileName}, chatDir = CIDirectSnd}) ->
+    [status <> " uploading " <> fileTransferStr fileId fileName <> " for " <> ttyContact c]
+  Just (AChatItem _ _ (GroupChat g) ChatItem {file = Just CIFile {fileId, fileName}, chatDir = CIGroupSnd}) ->
+    [status <> " uploading " <> fileTransferStr fileId fileName <> " for " <> ttyGroup' g]
+  _ -> [status <> " uploading file"]
+
+directUploadComplete :: [Text] -> [StyledString]
+directUploadComplete uris = "file upload complete. download links:" : map plain uris
 
 sndFile :: SndFileTransfer -> StyledString
 sndFile SndFileTransfer {fileId, fileName} = fileTransferStr fileId fileName
